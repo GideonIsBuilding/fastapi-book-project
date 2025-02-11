@@ -42,15 +42,10 @@ async def create_book(book: Book):
 
 
 @router.get(
-    "/{book_id}", response_model=Book, status_code=status.HTTP_200_OK)
-async def get_book_by_id(book_id: int):
-    book = db.books.get(book_id)
-    if book is None:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"detail": "404 Not Found"},
-        )
-    return book
+    "/", response_model=OrderedDict[int, Book], status_code=status.HTTP_200_OK
+)
+async def get_books() -> OrderedDict[int, Book]:
+    return db.get_books()
 
 
 @router.put("/{book_id}", response_model=Book, status_code=status.HTTP_200_OK)
@@ -65,3 +60,15 @@ async def update_book(book_id: int, book: Book) -> Book:
 async def delete_book(book_id: int) -> None:
     db.delete_book(book_id)
     return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+
+
+@router.get(
+    "/{book_id}", response_model=Book, status_code=status.HTTP_200_OK)
+async def get_book_by_id(book_id: int):
+    book = db.books.get(book_id)
+    if book is None:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "404 Not Found"},
+        )
+    return book
