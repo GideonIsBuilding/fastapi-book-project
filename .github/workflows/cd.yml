@@ -37,6 +37,7 @@ jobs:
                 echo "No existing project directory found"
                 git clone https://github.com/GideonIsBuilding/fastapi-book-project.git
                 cd fastapi-book-project
+                bash install-docker.sh
                 docker compose up -d --build
             fi
             EOF
