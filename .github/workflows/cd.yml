@@ -37,7 +37,7 @@ jobs:
 
       - name: Build and Deploy to Production
         run: |
-            ssh root@${{ secrets.PRODUCTION_SERVER }} <<< 'EOF'
+            ssh root@${{ secrets.PRODUCTION_SERVER }} << 'EOF'
             echo "Deploying latest changes to production..."
             if [ -d fastapi-book-project ]; then
                 cd fastapi-book-project
