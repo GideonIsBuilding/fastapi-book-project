@@ -1,11 +1,9 @@
 name: CD Pipeline
 
 on:
-  pull_request:
+  push:
     branches:
       - main
-    types:
-      - closed
   workflow_dispatch:
 
 jobs:
