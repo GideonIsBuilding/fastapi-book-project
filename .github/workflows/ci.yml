@@ -24,6 +24,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install flake8 mypy black bandit
+      
+      - name: Check Syntax with Flake8
+        run: flake8 .
+      
+      - name: Check Formatting with Black
+        run: black --check .
+      
+      - name: Check Formatting with Mypy
+        run: mypy .
+      
+      - name: Run Bandit (Security Checks)
+        run: bandit -r .
       
       - name: Run Pytest with Timeout of 5 minutes
         run: pytest tests/ --timeout=300
