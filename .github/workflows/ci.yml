@@ -22,11 +22,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          python -m venv venv
-          source venv/bin/activate
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: Run Pytest
-        run: |
-          source venv/bin/activate
-          pytest tests/
+      - name: Run Pytest with Timeout of 5 minutes
+        run: pytest tests/ --timeout=300
