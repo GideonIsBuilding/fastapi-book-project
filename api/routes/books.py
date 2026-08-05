@@ -4,6 +4,7 @@ from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
 from api.db.schemas import Book, Genre, InMemoryDB
+from core.logger import logger
 
 router = APIRouter()
 
@@ -35,6 +36,10 @@ db.books = {
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_book(book: Book):
+    logger.info(
+        "Creating a new book record",
+        extra={"event_name": "create_book", "book_id": book.id, "genre": book.genre.value}
+    )
     db.add_book(book)
     return JSONResponse(
         status_code=status.HTTP_201_CREATED, content=book.model_dump()
@@ -50,6 +55,10 @@ async def get_books() -> OrderedDict[int, Book]:
 
 @router.put("/{book_id}", response_model=Book, status_code=status.HTTP_200_OK)
 async def update_book(book_id: int, book: Book) -> Book:
+    logger.info(
+        "Updating book record",
+        extra={"event_name": "update_book", "book_id": book_id, "genre": book.genre.value}
+    )
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content=db.update_book(book_id, book).model_dump(),
@@ -58,6 +67,10 @@ async def update_book(book_id: int, book: Book) -> Book:
 
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_book(book_id: int) -> None:
+    logger.info(
+        "Deleting book record",
+        extra={"event_name": "delete_book", "book_id": book_id}
+    )
     db.delete_book(book_id)
     return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
 
@@ -67,8 +80,16 @@ async def delete_book(book_id: int) -> None:
 async def get_book_by_id(book_id: int):
     book = db.books.get(book_id)
     if book is None:
+        logger.warning(
+            "Book record not found",
+            extra={"event_name": "book_not_found", "book_id": book_id}
+        )
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"detail": "404 Not Found"},
         )
+    logger.info(
+        "Retrieved book record by ID",
+        extra={"event_name": "get_book_by_id", "book_id": book_id}
+    )
     return book
