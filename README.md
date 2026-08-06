@@ -1,12 +1,40 @@
 # Operational Readiness Demo
 
-## Assessment Context
-This technical assessment builds upon an existing personal FastAPI book management application. The original application code (which predates this assessment) provided standard CRUD operations for book collections. The assessment work focused entirely on adding operational-readiness capabilities, including:
-* Structured JSON logging via custom ASGI middleware.
-* Bounded HTTP telemetry metrics scraped by a containerized Prometheus instance.
-* Custom dynamic `/health` (liveness) and `/ready` (readiness) check endpoints.
-* Availability (`APIUnavailable`) and performance (`APILatencyElevated`) alerts.
-* Reversible failure simulation script and operator validation checklists.
+## Project Context
+
+This assessment builds upon an existing FastAPI book-management application
+that was developed previously.
+
+The original project history shows the last pre-assessment development
+activity on February 14, 2025. The work after that point represents the
+operational-readiness enhancements made for this assessment.
+
+### Assessment Contributions
+
+The assessment work focused on extending the existing application with:
+
+- Structured JSON logging
+- Health and readiness checks
+- Prometheus application and HTTP metrics
+- Prometheus availability and performance alerts
+- Docker Compose-based reproducible deployment
+- Grafana monitoring
+- Automatically provisioned Prometheus datasource and Grafana dashboard
+- Reproducible PostgreSQL failure simulation
+- Recovery and validation procedures
+- Operational evidence
+- Incident runbook
+- Security and configuration improvements
+
+The underlying FastAPI book-management functionality was retained as the
+existing application baseline rather than presented as new work for this
+assessment.
+
+The following Git history provides context for the transition from the
+existing project to the assessment work:
+
+![Git history showing assessment changes](evidence/screenshots/project-history.png)
+
 
 ## AI-Assisted Development
 
