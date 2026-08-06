@@ -250,9 +250,46 @@ When the alert fires, follow this investigation path:
 4.  **Inspect Database Container**: Run `docker compose ps` and `docker compose logs db` to verify if the database service is running, crashed, or restarting.
 5.  **Restore Dependency**: Resolve connection blockages or restart database. Verify recovery when `/ready` returns back to `200 OK`.
 
+## Performance Alert
+
+A dedicated performance alert is configured in Prometheus to detect sustained latency degradation across API endpoints.
+
+### What it detects
+The alert triggers if the 95th percentile (p95) latency of API request processing exceeds the acceptable threshold for a sustained period, indicating that a significant portion of user requests are experiencing sluggishness.
+
+### Metric used
+*   **`http_request_duration_seconds`** (Histogram): Tracks request execution latency buckets. It uses normalized path values (e.g. `/api/v1/books/{book_id}`) to prevent unbounded metric label cardinality.
+
+### Query
+The p95 latency is evaluated using the following PromQL query:
+```promql
+histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le))
+```
+
+### Threshold and `for` duration
+*   **Threshold**: `> 0.5` (500ms)
+*   **Evaluation Window**: `1m`
+*   **For duration**: `30s` (equivalent to 6 consecutive failed scrape samples of `5s` interval).
+
+### Why p95
+Average latency is a poor operational signal because a few extremely slow requests (e.g., affecting 5% of users due to database lock contentions or complex query filtering) will be hidden by the majority of fast requests. The p95 latency represents the worst-case experience for 5% of users, providing direct visibility into system performance degradation.
+
+### Why this threshold
+The typical baseline latency of this API is extremely low (<10ms under normal testing conditions). A threshold of `500ms` represents a significant (50x) performance deviation, signaling a severe degradation (such as network bottlenecks, locked DB tables, or resource starvation) while avoiding false pages for minor transient spikes. Due to a lack of long-term historical baseline data, this threshold is an initial operational assumption that should be tuned using production load test profiles.
+
+### Operator response
+When the performance alert fires, follow this investigation path:
+1.  **Check current p95 latency**: Access the Prometheus dashboard at `http://localhost:9090` and execute the p95 PromQL query to see the current duration.
+2.  **Determine affected routes**: Run the query `sum(rate(http_request_duration_seconds_sum[5m])) by (path) / sum(rate(http_request_duration_seconds_count[5m])) by (path)` to find which routes are slow.
+3.  **Inspect application logs**: Run `docker compose logs api` to inspect slow query warning traces or transaction blocks.
+4.  **Check database health**: Verify if PostgreSQL connection queues are full or if CPU/memory utilization on the DB container is maxed out.
+5.  **Check recent changes**: Inspect deployment pipelines or configuration changes to see if a recent commit caused performance issues.
+6.  **Recover or Rollback**: Restart database connections, optimize index tables, or rollback the api container version. Verify recovery when p95 latency falls back to baseline levels.
+
 ### Limitations
-*   **No Auto-Remediation**: The alert detects outages but does not attempt automatic service self-healing.
-*   **No Alertmanager**: Notification routing systems (e.g. Email, PagerDuty, Slack channels) are intentionally omitted to keep the monitoring stack minimal. Alert statuses are inspected directly via the Prometheus UI at `http://localhost:9090/alerts`.
+*   **No root cause diagnosis**: The alert registers latency degradation but does not automatically identify the underlying cause (e.g., locking, lack of indexes, slow networks).
+*   **No distributed tracing**: Detailed traces (such as OpenTelemetry span charts) are omitted to keep the SRE container stack minimal.
+*   **No Alertmanager**: Notifications are not actively routed to external communication platforms. The alert status must be checked at the Prometheus UI alerts tab.
 
 
 ## Error Handling

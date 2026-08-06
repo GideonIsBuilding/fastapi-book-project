@@ -9,3 +9,14 @@ groups:
         annotations:
           summary: "Book API is not ready"
           description: "The Book API has remained unavailable for longer than 15 seconds. Investigate the API and database dependency."
+
+  - name: performance-alerts
+    rules:
+      - alert: APILatencyElevated
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le)) > 0.5
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Book API latency is elevated"
+          description: "The p95 request latency of the Book API has remained above 500ms for longer than 30 seconds."
