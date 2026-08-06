@@ -159,17 +159,17 @@ To safely reproduce the incident locally for testing or training:
 
 | Stage | Expected Status | Actual Result | Timing |
 | :--- | :--- | :--- | :--- |
-| **Baseline (Healthy)** | `/health: 200`, `/ready: 200` | Healthy, serving data | `01:28:36 UTC` |
-| **Failure Injected** | DB stopped, `/ready: 503` | Verified stopped, readiness drops | `01:28:54 UTC` |
-| **Alert Firing** | `APIUnavailable` state: firing | Fired in Prometheus | `01:29:12 UTC` |
-| **Recovery command** | `docker compose start db` | Started container | `02:05:06 UTC` |
-| **Readiness Restored** | `/ready: 200` | Reconnected automatically | `02:05:18 UTC` |
-| **Validation** | Book create succeeds, data intact | Confirmed write/read | `02:05:38 UTC` |
-| **Alert Cleared** | `APIUnavailable` state: inactive | Cleared back to inactive | `02:05:37 UTC` |
+| **Baseline (Healthy)** | `/health: 200`, `/ready: 200` | Healthy, serving data | `16:45:00 UTC` |
+| **Failure Injected** | DB stopped, `/ready: 503` | Verified stopped, readiness drops | `16:45:22 UTC` |
+| **Alert Firing** | `APIUnavailable` state: firing | Fired in Prometheus | `16:45:37 UTC` |
+| **Recovery command** | `docker compose start db` | Started container | `16:46:10 UTC` |
+| **Readiness Restored** | `/ready: 200` | Reconnected automatically | `16:46:22 UTC` |
+| **Validation** | Book create succeeds, data intact | Confirmed write/read | `16:46:38 UTC` |
+| **Alert Cleared** | `APIUnavailable` state: inactive | Cleared back to inactive | `16:46:37 UTC` |
 
-*   **Time to Detection**: ~18.5 seconds
-*   **Time to Recovery**: ~12.0 seconds
-*   **Alert Clearance Time**: ~31.0 seconds
+*   **Time to Detection**: ~15.0 seconds (15s Prometheus evaluation delay)
+*   **Time to Recovery**: ~12.0 seconds (automatic connection pool recovery)
+*   **Alert Clearance Time**: ~27.0 seconds (duration for next scrape & evaluate cycle)
 
 ---
 

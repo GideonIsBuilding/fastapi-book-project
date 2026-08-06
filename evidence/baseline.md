@@ -1,64 +1,40 @@
-# Outage Evidence: Healthy Baseline
+# Baseline
 
-This document contains evidence of the healthy system state prior to simulating the database outage.
+## Purpose
+Establish the known-good state before failure injection.
 
-## 1. Container Status
-```text
-NAME                      IMAGE                      STATUS
-fastapi-book-api          fastapi-book-project-api   Up
-fastapi-book-db           postgres:16-alpine         Up (healthy)
-fastapi-book-prometheus   prom/prometheus:v2.52.0    Up
-```
+## Environment
+The testing is conducted entirely locally using Docker Compose. The environment consists of the following components:
+*   `fastapi-book-api`: The FastAPI application container exposing APIs on port `8000`.
+*   `fastapi-book-db`: The PostgreSQL backend database container exposing standard socket port `5432` internally.
+*   `fastapi-book-prometheus`: The monitoring agent scraping `/metrics` on port `9090`.
+*   `fastapi-book-grafana`: The visualization dashboard console on port `3000`.
 
-## 2. Liveness Check
-```bash
-curl -i http://localhost:8000/health
-```
-Output:
-```http
-HTTP/1.1 200 OK
-content-type: application/json
+## Expected Healthy State
+When the environment is fully operational:
+*   **Application readiness**: `/ready` endpoint returns HTTP status `200 OK`.
+*   **PostgreSQL connectivity**: Database connection successfully established by the API.
+*   **Active alerts**: Both SRE alert rules (`APIUnavailable`, `APILatencyElevated`) reside in an `inactive` evaluation state.
+*   **HTTP request behaviour**: Requests return successful standard responses (e.g. `200` or `201`).
+*   **Latency**: The 95th percentile request latency stays well below the 500ms warning threshold.
 
-{"status":"healthy"}
-```
+## Observed Baseline
+The following logs and query outputs demonstrate the healthy baseline state:
 
-## 3. Readiness Check
-```bash
-curl -i http://localhost:8000/ready
-```
-Output:
-```http
-HTTP/1.1 200 OK
-content-type: application/json
+1.  **Liveness and Readiness Check**:
+    *   `GET /health` → `200 OK` (`{"status":"healthy"}`)
+    *   `GET /ready` → `200 OK` (`{"status":"ready"}`)
+2.  **API Data Retrieval Check**:
+    *   `GET /api/v1/books/` returned the complete list of seed books (IDs 1, 2, and 3) successfully.
+3.  **Prometheus Target Health**:
+    *   Prometheus targets query `/api/v1/targets` verified active targets:
+        ```json
+        {"status":"success","data":{"activeTargets":[{"labels":{"instance":"api:8000","job":"fastapi-app"},"health":"up"}]}}
+        ```
+4.  **Alert Rules Status**:
+    *   Prometheus query `/api/v1/rules` returned alert states:
+        *   `APIUnavailable`: `inactive`
+        *   `APILatencyElevated`: `inactive`
 
-{"status":"ready"}
-```
-
-## 4. API Data Retrieval Check
-```bash
-curl -s http://localhost:8000/api/v1/books/
-```
-Output:
-```json
-{"1":{"id":1,"title":"The Hobbit","author":"J.R.R. Tolkien","publication_year":1937,"genre":"Science Fiction"},"2":{"id":2,"title":"The Lord of the Rings","author":"J.R.R. Tolkien","publication_year":1954,"genre":"Fantasy"},"3":{"id":3,"title":"The Return of the King","author":"J.R.R. Tolkien","publication_year":1955,"genre":"Fantasy"}}
-```
-
-## 5. Prometheus Target Health
-Query:
-```bash
-curl -s http://localhost:9090/api/v1/targets
-```
-Output:
-```json
-{"status":"success","data":{"activeTargets":[{"labels":{"instance":"api:8000","job":"fastapi-app"},"health":"up"}]}}
-```
-
-## 6. Prometheus Active Alert Status
-Query:
-```bash
-curl -s http://localhost:9090/api/v1/rules
-```
-Output:
-```json
-{"status":"success","data":{"groups":[{"name":"availability-alerts","rules":[{"state":"inactive","name":"APIUnavailable"}]},{"name":"performance-alerts","rules":[{"state":"inactive","name":"APILatencyElevated"}]}]}}
-```
+## Evidence
+![Service is healthy](screenshots/Service%20is%20healthy.png)

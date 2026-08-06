@@ -8,11 +8,24 @@ This technical assessment builds upon an existing personal FastAPI book manageme
 * Availability (`APIUnavailable`) and performance (`APILatencyElevated`) alerts.
 * Reversible failure simulation script and operator validation checklists.
 
-## What This Demonstrates
-This project directly demonstrates the requirements of **Case Study 3 — Operational Readiness and Recovery**:
-*   **Outcome 1 (Observe What Matters)**: Exposing clear structured logs, Prometheus-compatible HTTP counts/duration metrics with bounded path labels to control cardinality, and health/readiness endpoints.
-*   **Outcome 2 (Alert and Recover)**: Defining actionable availability alerts (for dependency readiness failure) and performance alerts (for sustained p95 latency breaches), with a safe simulation script to demonstrate detection, triage, targeted recovery, and complete validation.
-*   **Outcome 3 (Runbook and Improvement)**: Providing a concise operator-facing incident response runbook (`RUNBOOK.md`) with explicit escalation thresholds, recovery validation criteria, and a concrete preventive improvement.
+## AI-Assisted Development
+
+AI tools were used as a development aid during the implementation of
+the operational-readiness enhancements, primarily for researching
+observability patterns, structuring the JSON logging and metrics
+approach, and drafting configuration scaffolding.
+
+The final implementation, architecture, configuration decisions, and
+operational behaviour were reviewed and implemented by me. This
+included integrating the observability components, configuring
+Prometheus and Grafana, defining health/readiness and alerting
+behaviour, creating the failure simulation and recovery workflow, and
+validating the complete environment locally.
+
+The Grafana dashboard was provisioned as JSON and integrated into the
+container startup process so that the complete monitoring environment
+is available automatically when the stack is started, without requiring
+manual dashboard or datasource configuration.
 
 ## Architecture
 ```text

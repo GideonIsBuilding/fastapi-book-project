@@ -1,91 +1,49 @@
-# Outage Evidence: Recovery and Validation
+# Recovery and Validation
 
-This document contains evidence of manual database container recovery and full validation checks.
-
-## 1. Targeted Recovery Command
+## Recovery Action
+To restore the failed PostgreSQL container dependency, the operator executed the following targeted command:
 ```bash
 docker compose start db
 ```
-Output:
-```text
-Container fastapi-book-db Starting
-Container fastapi-book-db Started
-```
+*   *Note*: The database volume `db-data` was not deleted or modified, preserving all persistent records.
 
-## 2. Database Logs
-```bash
-docker compose logs --tail=2 db
-```
-Output:
-```text
-2026-08-06 02:05:06.994 UTC [1] LOG:  database system is ready to accept connections
-```
+## Recovery Observation
+Following the database restoration, the following signals were observed:
+*   **PostgreSQL connectivity restored**: The database engine reported accepting connections within 4 seconds.
+*   **Application readiness restored**: The API automatically reconnected. `/ready` returned `HTTP 200 OK` within 12 seconds.
+*   **Alert cleared**: The `APIUnavailable` alert cleared back to `inactive` state on the first scrape cycle.
+*   **HTTP errors returned toward baseline**: Request connection timeouts ceased, and success counts resumed.
+*   **Latency**: Average endpoint latency returned to baseline levels (~16ms).
 
-## 3. Liveness Check
-```bash
-curl -i http://localhost:8000/health
-```
-Output:
-```http
-HTTP/1.1 200 OK
-content-type: application/json
+## Validation
+The operator validated the complete recovery of the environment using the following validation checklist:
+1.  **Readiness Probe**:
+    ```bash
+    curl -i http://localhost:8000/ready
+    ```
+    *   *Observed Output*: `HTTP 1.1 200 OK` with JSON `{"status":"ready"}`.
+2.  **API Functional Write/Read**:
+    Created a new book record using `POST` and fetched it using `GET`:
+    ```bash
+    curl -i -X POST -H "Content-Type: application/json" -d '{"id": 4, "title": "The Silmarillion", "author": "J.R.R. Tolkien", "publication_year": 1977, "genre": "Fantasy"}' http://localhost:8000/api/v1/books/
+    ```
+    *   *Observed Output*: `HTTP 1.1 201 Created` with the JSON record.
+3.  **Data Integrity Check**:
+    Verified that pre-existing seed data (Book IDs 1, 2, 3) remained available:
+    ```bash
+    curl -s http://localhost:8000/api/v1/books/
+    ```
+4.  **Prometheus & Alert State**:
+    Confirmed target is `UP` and `APIUnavailable` alert transitioned to `INACTIVE`.
 
-{"status":"healthy"}
-```
+## Evidence
+![DB connection restored](screenshots/DB%20connection%20restored.png)
+![Alerts cleared](screenshots/Alerts%20cleared.png)
 
-## 4. Readiness Check (Restored automatically)
-```bash
-curl -i http://localhost:8000/ready
-```
-Output:
-```http
-HTTP/1.1 200 OK
-content-type: application/json
+## Recovery Outcome
+The recovery was fully successful. The application reconnected to the database automatically without process restarts, persistent volumes preserved all book data, and SRE alerts cleared to an inactive state.
 
-{"status":"ready"}
-```
-
-## 5. Write and Read Functional Check
-Create book:
-```bash
-curl -i -X POST -H "Content-Type: application/json" -d '{"id": 4, "title": "The Silmarillion", "author": "J.R.R. Tolkien", "publication_year": 1977, "genre": "Fantasy"}' http://localhost:8000/api/v1/books/
-```
-Output:
-```http
-HTTP/1.1 201 Created
-content-type: application/json
-
-{"id":4,"title":"The Silmarillion","author":"J.R.R. Tolkien","publication_year":1977,"genre":"Fantasy"}
-```
-
-Read book:
-```bash
-curl -i http://localhost:8000/api/v1/books/4
-```
-Output:
-```http
-HTTP/1.1 200 OK
-content-type: application/json
-
-{"id":4,"title":"The Silmarillion","author":"J.R.R. Tolkien","publication_year":1977,"genre":"Fantasy"}
-```
-
-## 6. Persistent Data Verification (Existing data intact)
-```bash
-curl -s http://localhost:8000/api/v1/books/
-```
-Output:
-```json
-{"1":{"id":1,"title":"The Hobbit","author":"J.R.R. Tolkien","publication_year":1937,"genre":"Science Fiction"},"2":{"id":2,"title":"The Lord of the Rings","author":"J.R.R. Tolkien","publication_year":1954,"genre":"Fantasy"},"3":{"id":3,"title":"The Return of the King","author":"J.R.R. Tolkien","publication_year":1955,"genre":"Fantasy"},"4":{"id":4,"title":"The Silmarillion","author":"J.R.R. Tolkien","publication_year":1977,"genre":"Fantasy"}}
-```
-*(Pre-existing books 1, 2, and 3 are present alongside newly created book 4).*
-
-## 7. Prometheus Active Alert Status (Alert is inactive)
-Query:
-```bash
-curl -s http://localhost:9090/api/v1/rules
-```
-Output:
-```json
-{"status":"success","data":{"groups":[{"name":"availability-alerts","rules":[{"state":"inactive","name":"APIUnavailable"}]}]}}
-```
+## Assessment Mapping
+This evidence demonstrates:
+*   **SRE Recovery**: Targeted restart of only the failed dependency container minimizes outage duration and validates pool reconnection.
+*   **System Validation**: Performing end-to-end database-backed read/write tests confirms the service is fully functional rather than just process-live.
