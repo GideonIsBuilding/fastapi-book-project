@@ -47,6 +47,9 @@ This demonstration assumes you have **Docker** and **Docker Compose** installed 
    curl -i http://localhost:8000/health
    curl -i http://localhost:8000/ready
    ```
+4. Access Grafana Dashboard:
+   - URL: http://localhost:3000 (Default credentials: `admin` / `admin`).
+   - The dashboard `FastAPI Operational Readiness` is automatically provisioned under the `Operational Readiness` folder and is fully functional out-of-the-box.
 
 ## Operational Signals
 
