@@ -289,7 +289,134 @@ When the performance alert fires, follow this investigation path:
 ### Limitations
 *   **No root cause diagnosis**: The alert registers latency degradation but does not automatically identify the underlying cause (e.g., locking, lack of indexes, slow networks).
 *   **No distributed tracing**: Detailed traces (such as OpenTelemetry span charts) are omitted to keep the SRE container stack minimal.
-*   **No Alertmanager**: Notifications are not actively routed to external communication platforms. The alert status must be checked at the Prometheus UI alerts tab.
+## Failure Simulation
+
+A safe, controlled, and completely reversible database outage simulation was executed in the local Docker Compose environment.
+
+### Scenario
+A database dependency failure is the most common cause of application-level availability outages. We simulate this by stopping the PostgreSQL container.
+
+### Expected Behaviour
+1.  **Liveness (/health)** remains `200 OK` (the FastAPI container process is still running and able to answer HTTP requests).
+2.  **Readiness (/ready)** transitions to `503 Service Unavailable` with `{"status":"not_ready","reason":"database_unavailable"}` because connection checks to the database fail.
+3.  **Logs** print database connectivity exceptions (`Can't create a connection to host db`).
+4.  **Prometheus target** remains `UP` (since the FastAPI API process is alive and serves scrape requests successfully).
+5.  **Alerts**: The `APIUnavailable` alert transitions from `INACTIVE` -> `PENDING` -> `FIRING`.
+
+### Run Simulation
+To replicate the simulation:
+1.  **Stop Database Container**:
+    ```bash
+    docker compose stop db
+    ```
+2.  **Verify Outage Detection**:
+    Query liveness, readiness, and alert statuses:
+    ```bash
+    curl -i http://localhost:8000/health  # Returns 200 OK
+    curl -i http://localhost:8000/ready   # Returns 503 Service Unavailable
+    curl -s http://localhost:9090/api/v1/rules  # Verify APIUnavailable state transitions to firing
+    ```
+
+### Investigation Checklist
+Follow these steps to confirm the root cause during an outage:
+*   **Availability Alert Fires**: The first signal indicating a problem is the `APIUnavailable` alert transition to `FIRING`.
+*   **Process Liveness**: Querying `GET /health` returns `200 OK`, confirming that the API container process is alive and not deadlocked/crashed.
+*   **Database Connectivity Logs**: Run `docker compose logs api` to locate PostgreSQL socket connection errors.
+*   **Docker Container Status**: Run `docker compose ps` to verify that the `fastapi-book-db` container has stopped.
+
+### Recovery
+1.  **Start Database Container**:
+    ```bash
+    docker compose start db
+    ```
+2.  **Verify Recovery**:
+    ```bash
+    curl -i http://localhost:8000/ready   # Returns 200 OK
+    curl -s http://localhost:9090/api/v1/rules  # Verify APIUnavailable transitions back to inactive
+    ```
+
+### Result & Timings
+*   **Time to Detection**: ~18.5 seconds (measured from container stop to `APIUnavailable` alert status `firing`).
+*   **Time to Recovery**: ~11.0 seconds (measured from container start command to `/ready` returning `200 OK`).
+*   **Performance Alert Behavior**: The `APILatencyElevated` alert was not expected to fire for this failure scenario because the simulation targeted dependency availability rather than sustained latency degradation.
+*   **Data Safety**: The simulation used synthetic data only and did not delete or corrupt persistent database volumes. Existing test records remained intact after recovery.
+
+
+## Reproducing the Failure
+
+To make the failure simulation easily reproducible by another engineer or assessor, a dedicated bash script is provided in `scripts/simulate-db-failure.sh`.
+
+### What the script does
+The script automates the validation check loop, baseline recording, database service stopping, and post-failure state checking:
+1.  **Checks environment pre-requisites**: Verifies that Docker and Docker Compose are installed, targets are healthy, and the API is initially reachable and reporting `/health` → `200` and `/ready` → `200`.
+2.  **Stops the database dependency**: Runs `docker compose stop db` to safely stop the database service container.
+3.  **Observes failure propagation**: Waits a brief configured window (defaulting to 5 seconds) to allow the scraping metrics to detect the outage.
+4.  **Checks post-failure statuses**: Queries `/health` (verifying it stays `200 OK`) and `/ready` (verifying it correctly drops to `503 Service Unavailable`).
+5.  **Queries Prometheus Alert Status**: Checks the current state of the `APIUnavailable` alert rule inside Prometheus to confirm detection.
+6.  **Leaves the system failed**: The script purposefully exits and leaves the database stopped so the operator can inspect the live fail-state metrics and alerts.
+
+### Step-by-Step Reproduction Sequence
+To reproduce the SRE assessment simulation:
+1.  **Start the environment**:
+    ```bash
+    docker compose up -d
+    ```
+2.  **Verify initial baseline health**:
+    ```bash
+    curl http://localhost:8000/health
+    curl http://localhost:8000/ready
+    ```
+3.  **Run the simulation script**:
+    ```bash
+    ./scripts/simulate-db-failure.sh
+    ```
+4.  **Observe the results**: Review the script's terminal printout showing healthy liveness, failed readiness, and pending availability alerts.
+5.  **Investigate using logs**:
+    ```bash
+    docker compose logs api
+    ```
+6.  **Recover manually**:
+    ```bash
+    docker compose start db
+    ```
+## Recovery Procedure
+
+A manual, targeted operator recovery procedure is documented below to restore the application's database dependency after a simulated outage.
+
+### Restarting Only the Failed Dependency
+Instead of restarting the entire application stack (e.g. `docker compose down && docker compose up -d`), we target only the database container using:
+```bash
+docker compose start db
+```
+**Why this is preferred**:
+1.  **Minimizes Outage Scope**: Avoids unnecessarily severing connections or dropping active requests on unrelated components (like the API or monitoring tools) that are otherwise healthy.
+2.  **State Preservation**: Keeps in-memory registries, scrape histories, and system configurations fully intact.
+3.  **Faster recovery time**: Starting a single stopped container is significantly faster than rebuilding, recreation, and startup of the entire stack.
+
+### Recovery Criteria
+The system is considered fully recovered only when all of the following checkpoints are satisfied:
+1.  **Container Running**: `docker compose ps` shows `fastapi-book-db` status as `Up` (and healthy).
+2.  **Engine Operational**: Database logs (`docker compose logs db`) show `database system is ready to accept connections`.
+3.  **Liveness Validated**: `GET /health` returns `200 OK`.
+4.  **Readiness Validated**: `GET /ready` returns `200 OK`.
+5.  **Reconnection Verified**: The API automatically reconnects to the database container without process restarts.
+6.  **Functional Verification**: A database-backed write and read operation (e.g. creating and retrieving a book) completes successfully.
+7.  **Data Integrity Check**: Seed data created prior to the incident remains available (confirming persistent storage volume behavior).
+8.  **Prometheus Ingestion**: Target status remains `UP` at `http://localhost:9090/targets`.
+9.  **Alert Clearance**: The `APIUnavailable` alert transitions back to `INACTIVE` state.
+
+### SRE Investigation & Escalation Guide
+When alert rules fire, follow the manual checklist below:
+1.  **Check /health**: If health fails, the application process is dead. Restart the API: `docker compose restart api`.
+2.  **Check /ready**: If health is 200 but readiness returns 503, inspect database logs.
+3.  **Start DB**: Run `docker compose start db` if the database container is stopped.
+4.  **Escalation Path**: If the database container is running but `/ready` remains 503 after `2 minutes`, escalate to the Database Administrator or Platform Engineers to inspect:
+    *   PostgreSQL system capacity (disk space, RAM, CPU limits).
+    *   Network socket bindings and connection pools.
+    *   Schema or migration discrepancies.
+
+### Failure Limitations
+*   This simulation represents a clean container stop scenario. It does not validate recovery against data corruption, persistent volume disk failure, or complex transaction deadlocks.
 
 
 ## Error Handling
