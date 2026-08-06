@@ -120,6 +120,116 @@ Available genres:
 pytest
 ```
 
+## Metrics
+
+Exposes Prometheus-compatible application metrics at `GET /metrics`.
+
+| Metric                          | What it tells an operator |
+| ------------------------------- | ------------------------- |
+| `http_requests_total`           | Request volume            |
+| `http_request_duration_seconds` | Request latency           |
+| `http_requests_errors_total`    | Failed request volume     |
+
+### Why these metrics were selected
+These three metrics directly implement the core **Google SRE Golden Signals** for request-driven services (Traffic, Latency, and Errors). They provide high-level operational visibility:
+- **Traffic (`http_requests_total`)** tells us the request volume and pattern.
+- **Latency (`http_request_duration_seconds`)** tells us request execution duration, supporting p95 latency aggregation via buckets.
+- **Errors (`http_requests_errors_total`)** monitors 5xx status codes to report system availability and reliability.
+
+### Design Decisions
+Additional telemetry metrics (e.g. detailed memory, CPU counters, open file descriptors) and infrastructure (like Grafana agent sidecars, Alertmanager, OpenTelemetry tracing pipelines) are intentionally omitted at this stage. This keeps the deployment minimal, zero-maintenance, and focused strictly on the baseline operational readiness requirements of the application itself.
+
+
+## Health vs Readiness
+
+The application distinguishes between process liveness (health) and operational readiness.
+
+| Endpoint  | Purpose                  | Dependency | Failure response            |
+| --------- | ------------------------ | ---------- | --------------------------- |
+| `/health` | Process liveness         | None       | 200 if application responds |
+| `/ready`  | Ability to serve traffic | Database   | 503 if database unavailable |
+
+### Operational Details
+- **`/health` (Liveness)**: Answers if the application process is alive and responding to HTTP requests. It is kept extremely cheap and does not query the database, ensuring that transient database errors do not cause the process manager (e.g., Kubernetes, ECS, or load balancers) to prematurely kill and restart the application container.
+- **`/ready` (Readiness)**: Answers if the application is currently capable of serving client requests, which requires a healthy database dependency. It executes a lightweight connectivity check.
+- **Failure Status (503)**: If the database is unreachable, `/ready` returns `503 Service Unavailable` instead of `200` to notify load balancers to temporarily remove the instance from the routing pool. This avoids serving error responses to clients while allowing the process to remain alive.
+- **Noisy Log Suppression**: Successful probes (`status_code < 400`) to `/health`, `/ready`, and `/metrics` are not logged individually. This avoids filling disk space with low-value, high-frequency log entries while keeping fail-state diagnostics (5xx errors) fully visible in the logs.
+
+
+## Local Development & Docker Environment
+
+### Architecture
+
+```text
+Client
+  ↓
+FastAPI container (api:8000)
+  ↓
+Database container (db:5432)
+```
+
+### Local Setup
+
+To build and start the containerized application and its database:
+
+1.  **Configure Environment Variables**:
+    Create a local `.env` file from the example template:
+    ```bash
+    cp .env.example .env
+    ```
+2.  **Build the Application Image**:
+    ```bash
+    docker compose build
+    ```
+3.  **Start the Services**:
+    Run the services in the background:
+    ```bash
+    docker compose up -d
+    ```
+4.  **Verify Liveness (`/health`)**:
+    ```bash
+    curl http://localhost:8000/health
+    # Response: {"status": "healthy"}
+    ```
+5.  **Verify Readiness (`/ready`)**:
+    ```bash
+    curl http://localhost:8000/ready
+    # Response: {"status": "ready"}
+    ```
+6.  **Stop the Environment**:
+    Stop and remove containers while preserving data:
+    ```bash
+    docker compose down
+    ```
+7.  **Destroy the Environment and Persistent Data**:
+    Stop containers and delete the associated PostgreSQL database volume:
+    ```bash
+    docker compose down -v
+    ```
+
+### Configuration
+Configuration is managed using environment variables loaded in `core/config.py`. For local development, safe defaults are defined in `.env.example`:
+*   `DATABASE_HOST`: Service name (`db`) of the database container.
+*   `DATABASE_PORT`: Private port of the database service (`5432`).
+*   `DATABASE_USER` / `POSTGRES_USER`: The PostgreSQL database username.
+*   `DATABASE_PASSWORD` / `POSTGRES_PASSWORD`: The database connection password.
+*   `DATABASE_DB` / `POSTGRES_DB`: The target database name.
+
+### Persistence
+*   **What is persisted**: All PostgreSQL database records (the books collection).
+*   **Where it is persisted**: Inside a named Docker volume (`db-data`) mapped to `/var/lib/postgresql/data`.
+*   **Recreation behavior**: Recreating the `api` container or running `docker compose down` followed by `docker compose up -d` will not lose any books data, as the volume is decoupled from container cycles.
+*   **How to destroy data**: Run `docker compose down -v` to destroy the named volume.
+
+### Trade-offs
+*   **Docker Compose vs Kubernetes**: Docker Compose was selected instead of a heavier orchestration system (like Kubernetes or ECS) to minimize setup complexity, keep resource usage minimal on developers' local machines, and guarantee a single-command setup.
+*   **Pure Python database client**: Using `pg8000` instead of a compiled client (like `psycopg2`) keeps the API Docker image tiny and builds lightning-fast without requiring binary compilation toolchains inside Alpine.
+
+### Limitations & Deferred Items
+*   **Secrets Management**: Production secrets injection (e.g. AWS Secrets Manager or HashiCorp Vault) is deferred. The application relies entirely on environment variable injection.
+*   **External connection port**: The database container does not expose port `5432` to the host machine. To inspect the database directly, tools must run inside the container network.
+
+
 ## Error Handling
 
 The API includes proper error handling for:

@@ -29,3 +29,39 @@ app.include_router(api_router, prefix=settings.API_PREFIX)
 async def health_check():
     """Checks if server is active."""
     return {"status": "active"}
+
+
+@app.get("/health")
+def health():
+    """Liveness check that returns HTTP 200 when the app process is alive."""
+    return {"status": "healthy"}
+
+
+@app.get("/ready")
+def ready():
+    """Readiness check that queries the database dependency connection."""
+    from fastapi.responses import JSONResponse
+    from api.routes.books import db
+    try:
+        if not db.check_connection():
+            raise Exception("Database check failed")
+        return {"status": "ready"}
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "reason": "database_unavailable"}
+        )
+
+
+@app.get("/metrics")
+def metrics():
+    """Exposes Prometheus application metrics."""
+    from fastapi import Response
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/error")
+def trigger_error():
+    """Deliberately raises an exception for testing error metrics and logs."""
+    raise ValueError("Deliberate application error")

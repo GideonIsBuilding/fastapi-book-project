@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str = secrets.token_urlsafe(32)
     DEBUG: bool = False
     TESTING: bool = False
+    
+    DATABASE_HOST: str = "db"
+    DATABASE_PORT: int = 5432
+    DATABASE_USER: str = "postgres"
+    DATABASE_PASSWORD: str = "postgres"
+    DATABASE_DB: str = "books"
 
 
 settings = Settings()

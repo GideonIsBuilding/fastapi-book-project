@@ -96,3 +96,90 @@ def test_get_nonexistent_book_warning(caplog):
         assert warning_logs[0].book_id == 999
         assert warning_logs[0].levelname == "WARNING"
 
+
+def get_metric_value(metric_name, label_filters=None):
+    from prometheus_client import REGISTRY
+    for metric in REGISTRY.collect():
+        for sample in metric.samples:
+            if sample.name == metric_name:
+                if label_filters:
+                    match = all(sample.labels.get(k) == v for k, v in label_filters.items())
+                    if match:
+                        return sample.value
+                else:
+                    return sample.value
+    return 0.0
+
+
+def test_metrics_endpoint_exposes_prometheus_format():
+    response = client.get("http://test/metrics")
+    assert response.status_code == 200
+    assert "http_requests_total" in response.text
+    assert "http_request_duration_seconds" in response.text
+    assert "http_requests_errors_total" in response.text
+    assert response.headers["content-type"].startswith("text/plain")
+
+
+def test_successful_request_increments_request_counter():
+    labels = {"method": "GET", "path": "/api/v1/books/", "status_code": "200"}
+    before = get_metric_value("http_requests_total", labels)
+    
+    response = client.get("/books/")
+    assert response.status_code == 200
+    
+    after = get_metric_value("http_requests_total", labels)
+    assert after == before + 1
+
+
+def test_failed_request_increments_error_counter():
+    labels = {"method": "GET", "path": "/error", "status_code": "500"}
+    before_total = get_metric_value("http_requests_total", labels)
+    before_errors = get_metric_value("http_requests_errors_total", labels)
+    
+    from fastapi.testclient import TestClient
+    from main import app
+    err_client = TestClient(app, raise_server_exceptions=False)
+    response = err_client.get("/error")
+    assert response.status_code == 500
+    
+    after_total = get_metric_value("http_requests_total", labels)
+    after_errors = get_metric_value("http_requests_errors_total", labels)
+    
+    assert after_total == before_total + 1
+    assert after_errors == before_errors + 1
+
+
+def test_request_duration_seconds_is_recorded():
+    labels = {"method": "GET", "path": "/api/v1/books/", "status_code": "200"}
+    before_count = get_metric_value("http_request_duration_seconds_count", labels)
+    
+    response = client.get("/books/")
+    assert response.status_code == 200
+    
+    after_count = get_metric_value("http_request_duration_seconds_count", labels)
+    assert after_count == before_count + 1
+
+
+def test_health_endpoint_returns_healthy_200():
+    response = client.get("http://test/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy"}
+
+
+def test_ready_endpoint_returns_ready_200_when_db_up():
+    response = client.get("http://test/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+def test_ready_endpoint_returns_503_on_db_down():
+    from unittest.mock import patch
+    from api.routes.books import db
+    with patch.object(db, "check_connection", return_value=False):
+        response = client.get("http://test/ready")
+        assert response.status_code == 503
+        data = response.json()
+        assert data == {"status": "not_ready", "reason": "database_unavailable"}
+
+
+

@@ -1,20 +1,20 @@
-# Use official lightweight Python image
 FROM python:3.12-alpine
 
-# Set the working directory
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
-# Copy requirements
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 COPY requirements.txt .
 
-# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the api code
-COPY . .
+COPY --chown=appuser:appgroup . .
 
-# Expose FastAPI port
+USER appuser
+
 EXPOSE 8000
 
-# Run the application using uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
