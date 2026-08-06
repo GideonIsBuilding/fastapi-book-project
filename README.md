@@ -16,21 +16,15 @@ This project directly demonstrates the requirements of **Case Study 3 — Operat
 
 ## Architecture
 ```text
-Client / Assessor
-   │
-   ▼
-FastAPI (api:8000) ───► PostgreSQL (db:5432)
-   │
-   ├───────────────► stdout (Structured JSON logs)
-   │
-   └───────────────► Prometheus (prometheus:9090)
-                         │
-                         └──► Availability & Performance alerts
+Assessor (Grafana:3000) ───► Prometheus (prometheus:9090) ◄─── FastAPI (api:8000) ───► PostgreSQL (db:5432)
+                                                                 │
+                                                                 └─► stdout (Structured JSON logs)
 ```
 *   **FastAPI Service**: Serves CRUD APIs and dynamic endpoints `/health`, `/ready`, and `/metrics`.
 *   **PostgreSQL Database**: Persistent relational backend storage.
 *   **Structured JSON Logs**: Written to stdout for collection.
 *   **Prometheus Service**: Scrapes API `/metrics` every 5 seconds, evaluating alert rules continuously.
+*   **Grafana Service**: Exposed at `http://localhost:3000`, pre-provisioned with Prometheus as the default datasource.
 
 ## Quick Start
 
