@@ -4,6 +4,10 @@
 
 This project is a RESTful API built with FastAPI for managing a book collection. It provides comprehensive CRUD (Create, Read, Update, Delete) operations for books with proper error handling, input validation, and documentation.
 
+## SRE Operational Runbook
+
+For operator instructions regarding database outage triage checklists, recovery validation criteria, and escalation thresholds, refer to the SRE [Operational Runbook](file:///Users/galosikhena/Downloads/fastapi-book-project/RUNBOOK.md).
+
 ## Features
 
 - 📚 Book management (CRUD operations)
