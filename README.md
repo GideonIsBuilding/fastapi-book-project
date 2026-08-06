@@ -50,6 +50,7 @@ This demonstration assumes you have **Docker** and **Docker Compose** installed 
 4. Access Grafana Dashboard:
    - URL: http://localhost:3000 (Default credentials: `admin` / `admin`).
    - The dashboard `FastAPI Operational Readiness` is automatically provisioned under the `Operational Readiness` folder and is fully functional out-of-the-box.
+   - It includes a live count of active SRE alerts and a detailed "Active Firing Alerts" table showing the Name, State, and Severity of all currently firing rules (e.g., `APIUnavailable`, `APILatencyElevated`).
 
 ## Operational Signals
 
