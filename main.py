@@ -42,11 +42,14 @@ def ready():
     """Readiness check that queries the database dependency connection."""
     from fastapi.responses import JSONResponse
     from api.routes.books import db
+    from core.metrics import APPLICATION_READY
     try:
         if not db.check_connection():
             raise Exception("Database check failed")
+        APPLICATION_READY.set(1.0)
         return {"status": "ready"}
     except Exception:
+        APPLICATION_READY.set(0.0)
         return JSONResponse(
             status_code=503,
             content={"status": "not_ready", "reason": "database_unavailable"}
@@ -58,6 +61,15 @@ def metrics():
     """Exposes Prometheus application metrics."""
     from fastapi import Response
     from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+    from core.metrics import APPLICATION_READY
+    from api.routes.books import db
+    try:
+        if db.check_connection():
+            APPLICATION_READY.set(1.0)
+        else:
+            APPLICATION_READY.set(0.0)
+    except Exception:
+        APPLICATION_READY.set(0.0)
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

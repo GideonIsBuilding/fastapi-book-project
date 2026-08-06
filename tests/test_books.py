@@ -182,4 +182,18 @@ def test_ready_endpoint_returns_503_on_db_down():
         assert data == {"status": "not_ready", "reason": "database_unavailable"}
 
 
+def test_readiness_metric_reports_ready_and_not_ready():
+    # Call metrics endpoint to update the registry state
+    client.get("http://test/metrics")
+    assert get_metric_value("application_ready") == 1.0
+
+    # Verify application_ready reports 0.0 when database is mocked as down
+    from unittest.mock import patch
+    from api.routes.books import db
+    with patch.object(db, "check_connection", return_value=False):
+        client.get("http://test/metrics")
+        assert get_metric_value("application_ready") == 0.0
+
+
+
 

@@ -1,4 +1,4 @@
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Histogram, Gauge
 
 # Metric name: http_requests_total
 # Purpose: Shows how much traffic the service is receiving.
@@ -25,4 +25,12 @@ HTTP_REQUESTS_ERRORS_TOTAL = Counter(
     "http_requests_errors_total",
     "Total number of HTTP requests resulting in 5xx errors",
     ["method", "path", "status_code"]
+)
+
+# Metric name: application_ready
+# Purpose: Shows readiness status of the application (1 = ready, 0 = not ready).
+# Labels: None
+APPLICATION_READY = Gauge(
+    "application_ready",
+    "Readiness status of the application (1 = ready, 0 = not ready)"
 )

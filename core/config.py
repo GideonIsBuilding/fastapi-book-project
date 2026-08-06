@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     
     DATABASE_HOST: str = "db"
     DATABASE_PORT: int = 5432
-    DATABASE_USER: str = "postgres"
-    DATABASE_PASSWORD: str = "postgres"
+    DATABASE_USER: str = ""
+    DATABASE_PASSWORD: str = ""
     DATABASE_DB: str = "books"
 
 

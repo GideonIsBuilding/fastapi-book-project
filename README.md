@@ -225,9 +225,34 @@ Configuration is managed using environment variables loaded in `core/config.py`.
 *   **Docker Compose vs Kubernetes**: Docker Compose was selected instead of a heavier orchestration system (like Kubernetes or ECS) to minimize setup complexity, keep resource usage minimal on developers' local machines, and guarantee a single-command setup.
 *   **Pure Python database client**: Using `pg8000` instead of a compiled client (like `psycopg2`) keeps the API Docker image tiny and builds lightning-fast without requiring binary compilation toolchains inside Alpine.
 
-### Limitations & Deferred Items
-*   **Secrets Management**: Production secrets injection (e.g. AWS Secrets Manager or HashiCorp Vault) is deferred. The application relies entirely on environment variable injection.
-*   **External connection port**: The database container does not expose port `5432` to the host machine. To inspect the database directly, tools must run inside the container network.
+## Availability Alert
+
+A dedicated availability alert is configured in Prometheus to detect when the FastAPI application is unable to serve traffic.
+
+### What it detects
+The alert triggers if the application is reported as "not ready" for a sustained period. This is caused by the backend database service becoming unreachable or connection checks failing.
+
+### Metric/signal used
+*   **`application_ready`** (Gauge): Reports `1.0` when database connection checks succeed, or `0.0` when connection checks fail. This metric is dynamically updated on every Prometheus scrape request at `/metrics` and on calls to `/ready`.
+
+### Threshold and `for` duration
+*   **Expression**: `application_ready == 0`
+*   **For duration**: `15s` (equivalent to 3 consecutive failed scrape samples of `5s` interval).
+
+### Why this threshold
+The `15s` threshold balances early detection with alert filtering. A `0s` threshold would cause false alerts during transient networking blips or during short container restart periods. Conversely, a threshold larger than `1m` would delay operator response times for critical system outages.
+
+### Operator response
+When the alert fires, follow this investigation path:
+1.  **Check Liveness**: Query `curl http://localhost:8000/health`. If it fails (non-200), the application process is dead.
+2.  **Check Readiness**: Query `curl http://localhost:8000/ready`. If it returns `503 Service Unavailable`, proceed to logs.
+3.  **Inspect API Logs**: Run `docker compose logs api` and check for PostgreSQL connection exceptions.
+4.  **Inspect Database Container**: Run `docker compose ps` and `docker compose logs db` to verify if the database service is running, crashed, or restarting.
+5.  **Restore Dependency**: Resolve connection blockages or restart database. Verify recovery when `/ready` returns back to `200 OK`.
+
+### Limitations
+*   **No Auto-Remediation**: The alert detects outages but does not attempt automatic service self-healing.
+*   **No Alertmanager**: Notification routing systems (e.g. Email, PagerDuty, Slack channels) are intentionally omitted to keep the monitoring stack minimal. Alert statuses are inspected directly via the Prometheus UI at `http://localhost:9090/alerts`.
 
 
 ## Error Handling
