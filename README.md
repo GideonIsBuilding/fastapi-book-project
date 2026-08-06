@@ -1,5 +1,48 @@
 # FastAPI Book Management API
 
+## Assessment Context
+
+This assessment builds upon an existing personal FastAPI application. The
+original application predates this assessment. The assessment work focused on
+adding operational-readiness capabilities, including structured logging,
+health/readiness checks, metrics, monitoring, alerting, failure simulation,
+recovery validation, and operational documentation.
+
+## SRE Technical Assessment Summary
+
+This project implements a fully containerized, instrumented, and SRE-monitored FastAPI book collection service backed by PostgreSQL. Designed for maximum operational readiness, the service features structured JSON logging, dynamic liveness (`/health`) and readiness (`/ready`) endpoints, and custom Prometheus HTTP telemetry counters. 
+
+To ensure rapid incident resolution, two target alerting rules evaluate availability (`APIUnavailable` triggering on readiness loss for `15s`) and latency (`APILatencyElevated` triggering when p95 request durations exceed `500ms` for `30s`). An operator-facing [Operational Runbook](file:///Users/galosikhena/Downloads/fastapi-book-project/RUNBOOK.md) guides responders through triage steps, validation completion criteria, and escalation triggers. An automated reproduction script (`scripts/simulate-db-failure.sh`) stops the database dependency to verify liveness/readiness code paths and alert transitions. Safe recovery via manual starting of the PostgreSQL service restored connectivity within 12.0s without data loss or stack rebuilds, proving resilient data persistence and pool connectivity.
+
+### SRE Architecture Diagram
+
+```mermaid
+graph TD
+    Client[Client / Assessor] -->|HTTP Requests| API[FastAPI Container: api:8000]
+    API -->|Read/Write| DB[(PostgreSQL Container: db:5432)]
+    API -->|Structured JSON Logs| Stdout[Stdout / Docker Logs]
+    API -->|Dynamic Metrics /metrics| Prom[Prometheus Container: prometheus:9090]
+    Prom -->|Evaluate Alert Rules| Alerts{Alert Engine}
+    Alerts -->|application_ready == 0| Alert1[Availability Alert: APIUnavailable]
+    Alerts -->|p95 Latency > 500ms| Alert2[Performance Alert: APILatencyElevated]
+```
+
+### Assessment Evidence Matrix
+
+| Requirement | Implementation File | Verification Check | Evidence |
+| :--- | :--- | :--- | :--- |
+| **Structured logs** | [core/logger.py](file:///Users/galosikhena/Downloads/fastapi-book-project/core/logger.py) | Check JSON format in stdout | [logs trace](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/failure.md#4-api-error-logs) |
+| **Useful metrics** | [core/metrics.py](file:///Users/galosikhena/Downloads/fastapi-book-project/core/metrics.py) | Query `/metrics` endpoint | [metrics trace](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/recovery.md#6-persistent-data-verification-existing-data-intact) |
+| **Liveness probe** | `/health` in [main.py](file:///Users/galosikhena/Downloads/fastapi-book-project/main.py) | Query `/health` returns 200 OK | [health check](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/baseline.md#2-liveness-check) |
+| **Readiness probe** | `/ready` in [main.py](file:///Users/galosikhena/Downloads/fastapi-book-project/main.py) | Query `/ready` returns 503 on DB stop | [readiness check](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/failure.md#3-readiness-check-correctly-registers-dependency-loss) |
+| **Availability alert** | [alerts.yml](file:///Users/galosikhena/Downloads/fastapi-book-project/prometheus/alerts.yml) | Verify alert transitions to firing | [availability rules status](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/failure.md#5-prometheus-active-alert-status-alert-is-firing) |
+| **Performance alert** | [alerts.yml](file:///Users/galosikhena/Downloads/fastapi-book-project/prometheus/alerts.yml) | Verify rules loaded successfully | [rules rules status](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/baseline.md#6-prometheus-active-alert-status-active-alert-status) |
+| **Failure simulation** | [simulate-db-failure.sh](file:///Users/galosikhena/Downloads/fastapi-book-project/scripts/simulate-db-failure.sh) | Run `./scripts/simulate-db-failure.sh` | [simulation logs](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/failure.md) |
+| **Recovery sequence** | `docker compose start db` | Run start db command | [recovery output](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/recovery.md#1-targeted-recovery-command) |
+| **Validation checks** | Checklist in [RUNBOOK.md](file:///Users/galosikhena/Downloads/fastapi-book-project/RUNBOOK.md#8-validation-criteria) | Verify liveness, readiness, functional POST/GET | [recovery checks validation](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/recovery.md) |
+| **SRE Runbook** | [RUNBOOK.md](file:///Users/galosikhena/Downloads/fastapi-book-project/RUNBOOK.md) | View runbook checklists | [RUNBOOK.md](file:///Users/galosikhena/Downloads/fastapi-book-project/RUNBOOK.md) |
+| **Preventive improvement** | Retries in [RUNBOOK.md](file:///Users/galosikhena/Downloads/fastapi-book-project/RUNBOOK.md#15-preventive-improvement) | Documented exponential backoff | [improvement details](file:///Users/galosikhena/Downloads/fastapi-book-project/RUNBOOK.md#15-preventive-improvement) |
+
 ## Overview
 
 This project is a RESTful API built with FastAPI for managing a book collection. It provides comprehensive CRUD (Create, Read, Update, Delete) operations for books with proper error handling, input validation, and documentation.
@@ -447,3 +490,42 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 For support, please open an issue in the GitHub repository.
+
+
+## SRE Technical Assessment Checklist
+
+### Outcome 1 — Observe What Matters
+- [x] **Structured JSON logs**: Implemented via custom ASGI logging middleware.
+- [x] **Useful metrics**: Exposed `http_requests_total`, `http_request_duration_seconds`, and `http_requests_errors_total` on `/metrics`.
+- [x] **Health check**: Exposes dynamic process liveness `/health` endpoint.
+- [x] **Readiness check**: Exposes dynamic database connection check `/ready` endpoint.
+- [x] **Bounded metric labels**: Capped cardinality on `method`, `path` (normalized templates e.g. `{book_id}`), and `status_code`.
+- [x] **Signal explanations**: Fully documented what each alert and telemetry metric tells the operator.
+
+### Outcome 2 — Alert and Recover
+- [x] **Availability alert**: `APIUnavailable` fires if readiness is lost for 15s.
+- [x] **Performance alert**: `APILatencyElevated` fires if p95 latency exceeds 500ms for 30s.
+- [x] **Sensible thresholds**: Thresholds selected based on baseline latency comparisons.
+- [x] **Reproducible failure simulation**: Script `scripts/simulate-db-failure.sh` halts postgres dependency to test status check logic.
+- [x] **Detection evidence**: Confirmed transition of alert states in Prometheus.
+- [x] **Investigation evidence**: Traged using `/health`, `/ready`, and API container logs.
+- [x] **Recovery evidence**: Restored database container specifically without deleting database volumes.
+- [x] **Validation evidence**: Verified `/ready` returned 200 and database-backed write/read operations succeeded.
+
+### Outcome 3 — Runbook and Improvement
+- [x] **Ownership**: Assigned API operator, DB owner, and escalation lead roles in [RUNBOOK.md](file:///Users/galosikhena/Downloads/fastapi-book-project/RUNBOOK.md).
+- [x] **Triage checks**: Step-by-step triage sequence mapped to actual project scripts and endpoints.
+- [x] **Recovery procedure**: Documented target restart actions and caution tags against data-destructive volumes deletion commands.
+- [x] **Rollback guidance**: Defined application rollback criteria vs dependency recovery rules.
+- [x] **Escalation guidance**: Specified when to escalate and what debug traces to collect beforehand.
+- [x] **Root cause**: Outlined container outage root cause, detection, and validation cycles.
+- [x] **Evidence**: Gathered incident timestamps, metrics, and logs in [evidence/](file:///Users/galosikhena/Downloads/fastapi-book-project/evidence/).
+- [x] **Cost considerations**: Outlined compute and retention storage overheads for local vs production scaling.
+- [x] **One preventive improvement**: Proposed exponential connection retry backoffs to absorb transient database dropouts.
+
+### General
+- [x] **Synthetic data only**: All simulation and baseline checks performed using generated mock records.
+- [x] **No real credentials**: Removed all hardcoded database credentials, utilizing environment variable defaults.
+- [x] **Secrets excluded**: Verified `.env` file is excluded via `.gitignore`.
+- [x] **Reproducible locally**: Verified setup launches with single command `docker compose up -d`.
+- [x] **Limitations and deferred work**: Documented out-of-scope Alertmanager notifications and tracing capabilities.
